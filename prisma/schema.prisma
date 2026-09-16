@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+  ARCHIVED
+}
+
+// -----------------------------------------------------------------------------
+// CORE CONTENT MODELS
+// -----------------------------------------------------------------------------
+
+model Article {
+  id                String         @id @default(cuid())
+  title             String
+  slug              String         @unique
+  excerpt           String
+  content           String         @db.Text
+  status            ArticleStatus  @default(DRAFT)
+
+  // Primary Category (Each article has exactly ONE primary editorial section)
+  primaryCategoryId String
+  primaryCategory   Category       @relation("PrimaryCategoryArticles", fields: [primaryCategoryId], references: [id], onDelete: Restrict)
+
+  // Additional Categories (Many-to-Many without article record duplication)
+  categories        ArticleCategory[]
+
+  // Tags (Many-to-Many)
+  tags              ArticleTag[]
+
+  // Authorship
+  authorId          String
+  author            Author         @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  // Featured Hero Media
+  featuredImageId   String?
+  featuredImage     Media?         @relation("ArticleFeaturedImage", fields: [featuredImageId], references: [id], onDelete: SetNull)
+
+  // Inline Media / Story Assets
+  inlineMedia       ArticleMedia[]
+
+  // Dedicated 1-to-1 SEO Metadata
+  seo               ArticleSEO?
+
+  // Timestamps & Lifecycle
+  publishedAt       DateTime?
+  scheduledAt       DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  // Performance Indexes for frequent query patterns (Section 20)
+  @@index([slug])
+  @@index([status, publishedAt])
+  @@index([scheduledAt])
+  @@index([authorId])
+  @@index([primaryCategoryId])
+}
+
+model Category {
+  id              String            @id @default(cuid())
+  name            String            @unique
+  slug            String            @unique
+  description     String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Articles where this is the primary section
+  primaryArticles Article[]         @relation("PrimaryCategoryArticles")
+
+  // Articles where this is an additional section
+  articles        ArticleCategory[]
+
+  @@index([slug])
+}
+
+model ArticleCategory {
+  articleId  String
+  categoryId String
+  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+
+  // Database-level constraint preventing duplicate article-category assignment
+  @@id([articleId, categoryId])
+  @@index([categoryId])
+  @@index([articleId])
+}
+
+model Tag {
+  id        String       @id @default(cuid())
+  name      String       @unique
+  slug      String       @unique
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  articles  ArticleTag[]
+
+  @@index([slug])
+}
+
+model ArticleTag {
+  articleId  String
+  tagId      String
+  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+
+  // Database-level constraint preventing duplicate article-tag assignment
+  @@id([articleId, tagId])
+  @@index([tagId])
+  @@index([articleId])
+}
+
+model Author {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  bio       String?
+  avatar    String?
+  role      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  articles  Article[]
+
+  @@index([slug])
+}
+
+model Media {
+  id                  String         @id @default(cuid())
+  url                 String
+  storageKey          String?
+  fileName            String
+  altText             String?
+  caption             String?
+  mimeType            String?
+  width               Int?
+  height              Int?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  featuredInArticles  Article[]      @relation("ArticleFeaturedImage")
+  inlineInArticles    ArticleMedia[]
+}
+
+model ArticleMedia {
+  articleId  String
+  mediaId    String
+  caption    String?
+  order      Int            @default(0)
+  article    Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  media      Media          @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  assignedAt DateTime       @default(now())
+
+  @@id([articleId, mediaId])
+  @@index([mediaId])
+  @@index([articleId])
+}
+
+model ArticleSEO {
+  id                String   @id @default(cuid())
+  articleId         String   @unique
+  article           Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  seoTitle          String?
+  metaDescription   String?
+  focusKeyword      String?
+  canonicalUrl      String?
+  socialTitle       String?
+  socialDescription String?
+  socialImage       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model SiteSettings {
+  id                 String   @id @default(cuid())
+  siteName           String   @default("GNOSIS")
+  siteDescription    String?
+  defaultSocialImage String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
