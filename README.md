@@ -1,32 +1,92 @@
-# Ginosis
+# GNOSIS — Global Digital News Publication
 
-An article / critical form website built with [Next.js](https://nextjs.org).
+Gnosis is an independent international English-language digital news publication focused on delivering clear, timely, organized, and trustworthy journalism through a modern web experience.
 
-## Getting Started
+---
 
-First, run the development server:
+## 1. Technology Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Framework:** [Next.js](https://nextjs.org/) (App Router, Turbopack)
+- **Language:** [TypeScript](https://www.typescriptlang.org/)
+- **Styling:** Vanilla CSS design tokens with Tailwind CSS v4 utilities
+- **Typography:** Next Google Fonts (`Lora` editorial serif, `Geist` UI sans-serif)
+
+---
+
+## 2. Project Architecture (Phase 1)
+
+```text
+├── app/
+│   ├── layout.tsx              # Root layout (Masthead header, main shell, footer)
+│   ├── page.tsx                # Homepage (Hero, trending, category highlights, latest)
+│   ├── globals.css             # Centralized design tokens (colors, typography, borders)
+│   ├── loading.tsx             # Global loading skeleton state
+│   ├── not-found.tsx           # 404 error page
+│   ├── world/page.tsx          # World category hub
+│   ├── us/page.tsx             # U.S. category hub
+│   ├── uk/page.tsx             # UK category hub
+│   ├── technology/page.tsx     # Technology category hub
+│   ├── sports/page.tsx         # Sports category hub
+│   └── entertainment/page.tsx  # Entertainment category hub
+│
+├── components/
+│   ├── layout/
+│   │   ├── Header.tsx          # Top masthead, Gnosis wordmark, date, nav
+│   │   ├── MobileNav.tsx       # Responsive mobile navigation drawer
+│   │   └── Footer.tsx          # Publication footer, sections, policies
+│   ├── news/
+│   │   ├── FeaturedNewsCard.tsx# High-impact lead hero card
+│   │   ├── NewsCard.tsx        # Standard editorial card (vertical/horizontal)
+│   │   ├── CompactNewsCard.tsx # Dense headline + metadata card
+│   │   └── CategoryView.tsx    # Reusable category section layout
+│   └── ui/
+│       ├── Container.tsx       # Responsive layout container
+│       ├── SectionHeader.tsx   # Editorial section divider & header
+│       ├── CategoryBadge.tsx   # Category badge
+│       ├── ArticleMeta.tsx     # Author, date, and read time metadata
+│       └── EmptyState.tsx      # Empty content placeholder state
+│
+├── config/
+│   └── navigation.ts           # Centralized category & link definitions
+├── lib/
+│   └── placeholder-data.ts     # Fictional editorial articles for layout testing
+└── types/
+    └── news.ts                 # Strong TypeScript models (Article, Category, Author)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 3. Current Phase 1 Scope
 
-## Learn More
+Phase 1 establishes the **Project Foundation, Architecture & Design System**:
+- Editorial typography system & restrained color palette
+- Global responsive shell with desktop navigation and mobile drawer
+- Homepage layout structure (Hero, Trending, Category Highlights, Latest)
+- 6 primary category route hubs (`/world`, `/us`, `/uk`, `/technology`, `/sports`, `/entertainment`)
+- Reusable news cards and UI foundation
+- Zero database, authentication, admin CMS, or external API coupling (reserved for later phases).
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 4. How to Run Locally
 
-## Deploy on Vercel
+### Install dependencies:
+```bash
+npm install
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Start the development server:
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Build for production:
+```bash
+npm run build
+```
+
+### Run lint checks:
+```bash
+npm run lint
+```
