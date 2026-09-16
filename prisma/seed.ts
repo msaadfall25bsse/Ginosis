@@ -1,4 +1,5 @@
 import { PrismaClient, ArticleStatus } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -173,6 +174,28 @@ async function main() {
     },
   });
   console.log("✓ Seeded site settings");
+
+  // 7. Seed Initial Administrator (Phase 3)
+  const adminEmail = (process.env.ADMIN_EMAIL || "admin@gnosis.news").toLowerCase();
+  const rawAdminPassword = process.env.ADMIN_PASSWORD || "admin123456";
+  const passwordHash = await bcrypt.hash(rawAdminPassword, 12);
+
+  await prisma.user.upsert({
+    where: { email: adminEmail },
+    update: {
+      passwordHash,
+      role: "ADMIN",
+      isActive: true,
+    },
+    create: {
+      name: "Lead Administrator",
+      email: adminEmail,
+      passwordHash,
+      role: "ADMIN",
+      isActive: true,
+    },
+  });
+  console.log(`✓ Seeded initial administrator: ${adminEmail}`);
 
   console.log("🎉 Database seeding completed successfully.");
 }
