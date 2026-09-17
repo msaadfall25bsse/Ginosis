@@ -1,13 +1,24 @@
 import React from "react";
 import { requireAdmin } from "@/lib/auth/auth";
+import { AdminDashboardShell } from "@/components/admin/AdminDashboardShell";
 
 export default async function AdminDashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Server-side defense-in-depth guard: verifies active session and database isActive status
-  await requireAdmin();
+  // Server-side authorization guard: guarantees valid active admin session
+  const admin = await requireAdmin();
 
-  return <>{children}</>;
+  return (
+    <AdminDashboardShell
+      user={{
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+      }}
+    >
+      {children}
+    </AdminDashboardShell>
+  );
 }
