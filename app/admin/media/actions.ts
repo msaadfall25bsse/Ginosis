@@ -195,11 +195,16 @@ export async function deleteMediaAction(id: string) {
   }
 }
 
+import type { ReplaceMediaResult } from "@/lib/repositories/media.repository";
+
 /**
  * Server Action for safe asset replacement.
  * Preserves the database ID and article relationships.
  */
-export async function replaceMediaAction(id: string, formData: FormData) {
+export async function replaceMediaAction(
+  id: string,
+  formData: FormData
+): Promise<ReplaceMediaResult> {
   const user = await getCurrentUser();
   if (!user || user.role !== "ADMIN" || !user.isActive) {
     return { success: false, error: "Unauthorized: Administrator privileges required." };

@@ -49,11 +49,30 @@ export interface DeleteMediaResult {
   message: string;
 }
 
-export interface ReplaceMediaResult {
-  success: boolean;
-  media?: any;
-  error?: string;
-}
+export type ReplaceMediaResult =
+  | {
+      success: true;
+      media: {
+        id: string;
+        url: string;
+        storageKey: string | null;
+        fileName: string;
+        altText: string | null;
+        caption: string | null;
+        mimeType: string | null;
+        width: number | null;
+        height: number | null;
+        fileSize: number | null;
+        createdAt?: Date;
+        updatedAt?: Date;
+      };
+      error?: undefined;
+    }
+  | {
+      success: false;
+      media?: undefined;
+      error: string;
+    };
 
 /**
  * High-performance paginated media query supporting search, format filtering, and sorting.

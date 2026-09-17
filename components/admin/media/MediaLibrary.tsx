@@ -4,6 +4,7 @@ import React, { useState, useEffect, useTransition, useCallback } from "react";
 import { MediaGrid } from "./MediaGrid";
 import { MediaCardItem } from "./MediaCard";
 import { MediaUploader } from "./MediaUploader";
+import { MediaDetails } from "./MediaDetails";
 import { getMediaListAction } from "@/app/admin/media/actions";
 
 interface MediaLibraryProps {
@@ -207,6 +208,21 @@ export function MediaLibrary({ initialData }: MediaLibraryProps) {
         isOpen={isUploaderOpen}
         onClose={() => setIsUploaderOpen(false)}
         onUploadComplete={() => fetchMedia(1, search, mimeType, sort)}
+      />
+
+      {/* 5. Media Details Drawer (Inspector, Alt Text, Caption, Replace, Delete) */}
+      <MediaDetails
+        media={selectedMedia}
+        isOpen={Boolean(selectedMedia)}
+        onClose={() => setSelectedMedia(null)}
+        onUpdated={(updated) => {
+          setSelectedMedia(updated);
+          fetchMedia(page, search, mimeType, sort);
+        }}
+        onDeleted={() => {
+          setSelectedMedia(null);
+          fetchMedia(page, search, mimeType, sort);
+        }}
       />
     </div>
   );

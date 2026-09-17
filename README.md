@@ -56,15 +56,15 @@ Gnosis is an independent international English-language digital news publication
 
 ---
 
-## 3. Current Phase 1 Scope
+---
 
-Phase 1 establishes the **Project Foundation, Architecture & Design System**:
-- Editorial typography system & restrained color palette
-- Global responsive shell with desktop navigation and mobile drawer
-- Homepage layout structure (Hero, Trending, Category Highlights, Latest)
-- 6 primary category route hubs (`/world`, `/us`, `/uk`, `/technology`, `/sports`, `/entertainment`)
-- Reusable news cards and UI foundation
-- Zero database, authentication, admin CMS, or external API coupling (reserved for later phases).
+## 3. Project Status & Architecture Roadmap
+
+* **Phase 1: Editorial Design System & Public Foundation:** [Complete] Global editorial layout, desktop/mobile navigation, category hubs (`/world`, `/us`, `/uk`, `/technology`, `/sports`, `/entertainment`).
+* **Phase 2: Relational Database Architecture:** [Complete] PostgreSQL & Prisma schema, relational constraints, server-only repository layer. See [docs/database.md](docs/database.md).
+* **Phase 3: Secure Admin Authentication & Foundation:** [Complete] Edge route protection, encrypted sessions (`jose`), timing-safe hashing (`bcryptjs`), `/admin/login` portal, and responsive admin dashboard shell. See [docs/authentication.md](docs/authentication.md).
+* **Phase 4: Professional Media & Image Management System:** [Complete] Vercel Blob & local disk storage abstraction, authoritative magic-byte image validation, atomic upload pipeline with rollback, paginated newsroom media library (`/admin/media`), media inspector drawer, safe deletion reference protection, and reusable `<MediaPicker />`. See [docs/media-management.md](docs/media-management.md).
+* **Phase 5: Article Editorial CMS & Publishing Desk:** [Upcoming] Full-featured writing desk, rich text authoring, multi-category assignment, and publishing lifecycle.
 
 ---
 
