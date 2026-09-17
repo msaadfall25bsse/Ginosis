@@ -37,10 +37,10 @@ export function AdminSidebar({
     },
     {
       name: "Media Library",
-      href: "#",
-      active: false,
-      disabled: true,
-      badge: "Phase 4",
+      href: "/admin/media",
+      active: pathname.startsWith("/admin/media"),
+      disabled: false,
+      badge: undefined,
     },
     {
       name: "Settings",
