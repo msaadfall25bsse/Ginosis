@@ -123,3 +123,101 @@ export async function uploadMediaAction(
         : undefined,
   };
 }
+
+/**
+ * Server Action to fetch paginated media with search and filter controls.
+ */
+export async function getMediaListAction(options: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  mimeType?: string;
+  sort?: "newest" | "oldest" | "filename";
+}) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN" || !user.isActive) {
+    throw new Error("Unauthorized: Administrator privileges required.");
+  }
+
+  const { getPaginatedMedia } = await import("@/lib/repositories/media.repository");
+  return getPaginatedMedia(options);
+}
+
+/**
+ * Server Action to update media alt text, caption, and file name.
+ */
+export async function updateMediaMetadataAction(
+  id: string,
+  data: {
+    altText?: string;
+    caption?: string;
+    fileName?: string;
+  }
+) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN" || !user.isActive) {
+    return { success: false, error: "Unauthorized: Administrator privileges required." };
+  }
+
+  if (!id) {
+    return { success: false, error: "Media ID is required." };
+  }
+
+  try {
+    const { updateMediaMetadata } = await import("@/lib/repositories/media.repository");
+    const updated = await updateMediaMetadata(id, data);
+    return { success: true, media: updated };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to update media metadata." };
+  }
+}
+
+/**
+ * Server Action for safe media deletion.
+ * Protects against deleting media referenced in articles.
+ */
+export async function deleteMediaAction(id: string) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN" || !user.isActive) {
+    return { success: false, error: "Unauthorized: Administrator privileges required." };
+  }
+
+  if (!id) {
+    return { success: false, error: "Media ID is required." };
+  }
+
+  try {
+    const { deleteMediaSafe } = await import("@/lib/repositories/media.repository");
+    const result = await deleteMediaSafe(id);
+    return result;
+  } catch (error: any) {
+    return { success: false, message: error.message || "Failed to delete media item." };
+  }
+}
+
+/**
+ * Server Action for safe asset replacement.
+ * Preserves the database ID and article relationships.
+ */
+export async function replaceMediaAction(id: string, formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN" || !user.isActive) {
+    return { success: false, error: "Unauthorized: Administrator privileges required." };
+  }
+
+  const file = formData.get("file");
+  if (!file || !(file instanceof File) || file.size === 0) {
+    return { success: false, error: "No replacement image file provided." };
+  }
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const { replaceMediaSafe } = await import("@/lib/repositories/media.repository");
+    const result = await replaceMediaSafe(id, buffer, file.name, file.type);
+    return result;
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to replace media asset." };
+  }
+}
