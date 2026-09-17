@@ -148,11 +148,16 @@ model Media {
   mimeType            String?
   width               Int?
   height              Int?
+  fileSize            Int?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 
   featuredInArticles  Article[]      @relation("ArticleFeaturedImage")
   inlineInArticles    ArticleMedia[]
+
+  @@index([createdAt])
+  @@index([storageKey])
+  @@index([mimeType])
 }
 
 model ArticleMedia {
