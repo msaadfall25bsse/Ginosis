@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
-import { ArticleStatus } from "@prisma/client";
+import { ArticleStatus, Prisma } from "@prisma/client";
+import { generateSlug, checkSlugAvailability } from "@/lib/articles/slug";
 
 /**
  * Standard relational include for article queries
@@ -29,6 +30,10 @@ export const articleDefaultInclude = {
   },
   seo: true,
 };
+
+// -----------------------------------------------------------------------------
+// PUBLIC FRONTEND QUERIES (Preserved from earlier phases)
+// -----------------------------------------------------------------------------
 
 export async function getPublishedArticles(limit = 20, skip = 0) {
   return prisma.article.findMany({
@@ -111,4 +116,605 @@ export async function getAuthorArticles(authorSlug: string, limit = 20) {
     },
     take: limit,
   });
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 5: ADMIN ARTICLE CMS TYPES & OPERATIONS
+// -----------------------------------------------------------------------------
+
+export interface CreateArticleInput {
+  title: string;
+  slug?: string;
+  excerpt?: string;
+  content: string;
+  status: ArticleStatus;
+  primaryCategoryId: string;
+  additionalCategoryIds?: string[];
+  tagIds?: string[];
+  authorId: string;
+  featuredImageId?: string | null;
+  scheduledAt?: Date | null;
+  publishedAt?: Date | null;
+  seo?: {
+    seoTitle?: string | null;
+    metaDescription?: string | null;
+    focusKeyword?: string | null;
+    canonicalUrl?: string | null;
+    socialTitle?: string | null;
+    socialDescription?: string | null;
+    socialImage?: string | null;
+  } | null;
+  inlineMedia?: Array<{
+    mediaId: string;
+    caption?: string | null;
+    order: number;
+  }>;
+}
+
+export interface UpdateArticleInput {
+  title?: string;
+  slug?: string;
+  excerpt?: string;
+  content?: string;
+  status?: ArticleStatus;
+  primaryCategoryId?: string;
+  additionalCategoryIds?: string[];
+  tagIds?: string[];
+  authorId?: string;
+  featuredImageId?: string | null;
+  scheduledAt?: Date | null;
+  publishedAt?: Date | null;
+  seo?: {
+    seoTitle?: string | null;
+    metaDescription?: string | null;
+    focusKeyword?: string | null;
+    canonicalUrl?: string | null;
+    socialTitle?: string | null;
+    socialDescription?: string | null;
+    socialImage?: string | null;
+  } | null;
+  inlineMedia?: Array<{
+    mediaId: string;
+    caption?: string | null;
+    order: number;
+  }>;
+}
+
+export interface GetAdminArticlesOptions {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: ArticleStatus;
+  categoryId?: string;
+  authorId?: string;
+  sort?: "newest" | "published_newest" | "published_oldest" | "title_asc";
+}
+
+export interface AdminArticleSummaryItem {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  status: ArticleStatus;
+  publishedAt: Date | null;
+  scheduledAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  primaryCategory: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+  author: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+  featuredImage: {
+    id: string;
+    url: string;
+    fileName: string;
+    altText: string | null;
+  } | null;
+  _count: {
+    categories: number;
+    tags: number;
+    inlineMedia: number;
+  };
+}
+
+export interface PaginatedAdminArticlesResult {
+  articles: AdminArticleSummaryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/**
+ * Atomic Transactional Article Creation (Section 55, 93, 139)
+ * Saves Article + Categories + Tags + SEO + Inline Media atomically.
+ * Rolls back automatically if any relation fails.
+ */
+export async function createArticleTransaction(data: CreateArticleInput) {
+  return prisma.$transaction(async (tx) => {
+    // 1. Verify Primary Category existence
+    const primaryCategory = await tx.category.findUnique({
+      where: { id: data.primaryCategoryId },
+      select: { id: true },
+    });
+    if (!primaryCategory) {
+      throw new Error(`Primary category not found: ${data.primaryCategoryId}`);
+    }
+
+    // 2. Verify Author existence
+    const author = await tx.author.findUnique({
+      where: { id: data.authorId },
+      select: { id: true },
+    });
+    if (!author) {
+      throw new Error(`Author not found: ${data.authorId}`);
+    }
+
+    // 3. Verify Featured Image if provided
+    if (data.featuredImageId) {
+      const media = await tx.media.findUnique({
+        where: { id: data.featuredImageId },
+        select: { id: true },
+      });
+      if (!media) {
+        throw new Error(`Featured media item not found: ${data.featuredImageId}`);
+      }
+    }
+
+    // 4. Validate Slug Uniqueness
+    const targetSlug = generateSlug(data.slug || data.title);
+    const slugAvailability = await checkSlugAvailability(targetSlug);
+    if (!slugAvailability.isAvailable) {
+      throw new Error(
+        `This slug is already in use. Please choose another slug. (Suggestion: "${slugAvailability.suggestedSlug}")`
+      );
+    }
+
+    // 5. Determine publication timestamp
+    let publishedAt = data.publishedAt || null;
+    if (data.status === ArticleStatus.PUBLISHED && !publishedAt) {
+      publishedAt = new Date();
+    }
+
+    // 6. Create Main Article Record
+    const article = await tx.article.create({
+      data: {
+        title: data.title.trim(),
+        slug: targetSlug,
+        excerpt: data.excerpt?.trim() || "",
+        content: data.content,
+        status: data.status,
+        primaryCategoryId: data.primaryCategoryId,
+        authorId: data.authorId,
+        featuredImageId: data.featuredImageId || null,
+        scheduledAt: data.scheduledAt || null,
+        publishedAt,
+      },
+    });
+
+    // 7. Attach Additional Categories (Prevent duplicate of primary category)
+    if (data.additionalCategoryIds && data.additionalCategoryIds.length > 0) {
+      const cleanAdditional = Array.from(
+        new Set(
+          data.additionalCategoryIds.filter(
+            (catId) => catId && catId !== data.primaryCategoryId
+          )
+        )
+      );
+
+      for (const catId of cleanAdditional) {
+        await tx.articleCategory.create({
+          data: {
+            articleId: article.id,
+            categoryId: catId,
+          },
+        });
+      }
+    }
+
+    // 8. Attach Tags
+    if (data.tagIds && data.tagIds.length > 0) {
+      const cleanTags = Array.from(new Set(data.tagIds.filter(Boolean)));
+      for (const tagId of cleanTags) {
+        await tx.articleTag.create({
+          data: {
+            articleId: article.id,
+            tagId,
+          },
+        });
+      }
+    }
+
+    // 9. Attach Inline Media
+    if (data.inlineMedia && data.inlineMedia.length > 0) {
+      for (let i = 0; i < data.inlineMedia.length; i++) {
+        const item = data.inlineMedia[i];
+        await tx.articleMedia.create({
+          data: {
+            articleId: article.id,
+            mediaId: item.mediaId,
+            caption: item.caption || null,
+            order: typeof item.order === "number" ? item.order : i,
+          },
+        });
+      }
+    }
+
+    // 10. Attach SEO Metadata
+    if (data.seo) {
+      await tx.articleSEO.create({
+        data: {
+          articleId: article.id,
+          seoTitle: data.seo.seoTitle || null,
+          metaDescription: data.seo.metaDescription || null,
+          focusKeyword: data.seo.focusKeyword || null,
+          canonicalUrl: data.seo.canonicalUrl || null,
+          socialTitle: data.seo.socialTitle || null,
+          socialDescription: data.seo.socialDescription || null,
+          socialImage: data.seo.socialImage || null,
+        },
+      });
+    }
+
+    // Return the full populated article
+    return tx.article.findUniqueOrThrow({
+      where: { id: article.id },
+      include: articleDefaultInclude,
+    });
+  });
+}
+
+/**
+ * Atomic Transactional Article Update (Section 41, 54, 94, 139)
+ * Updates Article fields, diffs/synchronizes Categories & Tags, updates SEO and Inline Media.
+ * Preserves original publishedAt unless intentionally modified.
+ */
+export async function updateArticleTransaction(id: string, data: UpdateArticleInput) {
+  return prisma.$transaction(async (tx) => {
+    // 1. Fetch current article
+    const existing = await tx.article.findUnique({
+      where: { id },
+      include: {
+        categories: true,
+        tags: true,
+        inlineMedia: true,
+        seo: true,
+      },
+    });
+
+    if (!existing) {
+      throw new Error(`Article not found with ID: ${id}`);
+    }
+
+    // 2. Validate Slug if being updated
+    let newSlug = existing.slug;
+    if (data.slug && data.slug !== existing.slug) {
+      const cleanSlug = generateSlug(data.slug);
+      const slugCheck = await checkSlugAvailability(cleanSlug, id);
+      if (!slugCheck.isAvailable) {
+        throw new Error(
+          `This slug is already in use. Please choose another slug. (Suggestion: "${slugCheck.suggestedSlug}")`
+        );
+      }
+      newSlug = cleanSlug;
+    }
+
+    // 3. Verify Foreign Keys if changed
+    if (data.primaryCategoryId && data.primaryCategoryId !== existing.primaryCategoryId) {
+      const cat = await tx.category.findUnique({ where: { id: data.primaryCategoryId } });
+      if (!cat) throw new Error(`Primary category not found: ${data.primaryCategoryId}`);
+    }
+
+    if (data.authorId && data.authorId !== existing.authorId) {
+      const author = await tx.author.findUnique({ where: { id: data.authorId } });
+      if (!author) throw new Error(`Author not found: ${data.authorId}`);
+    }
+
+    if (data.featuredImageId && data.featuredImageId !== existing.featuredImageId) {
+      const media = await tx.media.findUnique({ where: { id: data.featuredImageId } });
+      if (!media) throw new Error(`Featured media item not found: ${data.featuredImageId}`);
+    }
+
+    // 4. Determine publishedAt timestamp preservation (Section 37 & 137)
+    let publishedAt = existing.publishedAt;
+    if (data.publishedAt !== undefined) {
+      publishedAt = data.publishedAt;
+    } else if (data.status === ArticleStatus.PUBLISHED && !existing.publishedAt) {
+      publishedAt = new Date();
+    }
+
+    const primaryCategoryId = data.primaryCategoryId || existing.primaryCategoryId;
+
+    // 5. Update Main Article Record
+    await tx.article.update({
+      where: { id },
+      data: {
+        title: data.title !== undefined ? data.title.trim() : undefined,
+        slug: newSlug,
+        excerpt: data.excerpt !== undefined ? data.excerpt.trim() : undefined,
+        content: data.content !== undefined ? data.content : undefined,
+        status: data.status !== undefined ? data.status : undefined,
+        primaryCategoryId,
+        authorId: data.authorId !== undefined ? data.authorId : undefined,
+        featuredImageId: data.featuredImageId !== undefined ? data.featuredImageId : undefined,
+        scheduledAt: data.scheduledAt !== undefined ? data.scheduledAt : undefined,
+        publishedAt,
+      },
+    });
+
+    // 6. Synchronize Additional Categories (Diff & Sync)
+    if (data.additionalCategoryIds !== undefined) {
+      const cleanAdditional = Array.from(
+        new Set(
+          data.additionalCategoryIds.filter(
+            (catId) => catId && catId !== primaryCategoryId
+          )
+        )
+      );
+
+      // Remove existing categories for this article
+      await tx.articleCategory.deleteMany({
+        where: { articleId: id },
+      });
+
+      // Insert updated categories
+      for (const catId of cleanAdditional) {
+        await tx.articleCategory.create({
+          data: {
+            articleId: id,
+            categoryId: catId,
+          },
+        });
+      }
+    }
+
+    // 7. Synchronize Tags (Diff & Sync)
+    if (data.tagIds !== undefined) {
+      const cleanTags = Array.from(new Set(data.tagIds.filter(Boolean)));
+
+      await tx.articleTag.deleteMany({
+        where: { articleId: id },
+      });
+
+      for (const tagId of cleanTags) {
+        await tx.articleTag.create({
+          data: {
+            articleId: id,
+            tagId,
+          },
+        });
+      }
+    }
+
+    // 8. Synchronize Inline Media
+    if (data.inlineMedia !== undefined) {
+      await tx.articleMedia.deleteMany({
+        where: { articleId: id },
+      });
+
+      for (let i = 0; i < data.inlineMedia.length; i++) {
+        const item = data.inlineMedia[i];
+        await tx.articleMedia.create({
+          data: {
+            articleId: id,
+            mediaId: item.mediaId,
+            caption: item.caption || null,
+            order: typeof item.order === "number" ? item.order : i,
+          },
+        });
+      }
+    }
+
+    // 9. Synchronize SEO Metadata
+    if (data.seo !== undefined) {
+      if (data.seo) {
+        await tx.articleSEO.upsert({
+          where: { articleId: id },
+          create: {
+            articleId: id,
+            seoTitle: data.seo.seoTitle || null,
+            metaDescription: data.seo.metaDescription || null,
+            focusKeyword: data.seo.focusKeyword || null,
+            canonicalUrl: data.seo.canonicalUrl || null,
+            socialTitle: data.seo.socialTitle || null,
+            socialDescription: data.seo.socialDescription || null,
+            socialImage: data.seo.socialImage || null,
+          },
+          update: {
+            seoTitle: data.seo.seoTitle || null,
+            metaDescription: data.seo.metaDescription || null,
+            focusKeyword: data.seo.focusKeyword || null,
+            canonicalUrl: data.seo.canonicalUrl || null,
+            socialTitle: data.seo.socialTitle || null,
+            socialDescription: data.seo.socialDescription || null,
+            socialImage: data.seo.socialImage || null,
+          },
+        });
+      } else {
+        await tx.articleSEO.deleteMany({
+          where: { articleId: id },
+        });
+      }
+    }
+
+    // Return the updated full article
+    return tx.article.findUniqueOrThrow({
+      where: { id },
+      include: articleDefaultInclude,
+    });
+  });
+}
+
+/**
+ * Archive an article (Section 48, 82, 138).
+ * Transitions status to ARCHIVED while keeping article content, relations, and media intact.
+ */
+export async function archiveArticle(id: string) {
+  return prisma.article.update({
+    where: { id },
+    data: {
+      status: ArticleStatus.ARCHIVED,
+    },
+    include: articleDefaultInclude,
+  });
+}
+
+/**
+ * Retrieves a single article with all relations for the editorial workspace (Section 96).
+ */
+export async function getAdminArticleById(id: string) {
+  return prisma.article.findUnique({
+    where: { id },
+    include: articleDefaultInclude,
+  });
+}
+
+/**
+ * Efficient Server-side Admin Article Listing (Sections 44, 45, 46, 47, 77, 78, 79, 80, 140).
+ * Excludes full rich content from projection to maintain lightning-fast response times.
+ */
+export async function getAdminArticles(
+  options: GetAdminArticlesOptions = {}
+): Promise<PaginatedAdminArticlesResult> {
+  const page = Math.max(1, options.page || 1);
+  const pageSize = Math.min(100, Math.max(1, options.pageSize || 20));
+  const skip = (page - 1) * pageSize;
+
+  const where: Prisma.ArticleWhereInput = {};
+
+  // Status Filter
+  if (options.status) {
+    where.status = options.status;
+  }
+
+  // Category Filter (Primary or Additional)
+  if (options.categoryId) {
+    where.OR = [
+      { primaryCategoryId: options.categoryId },
+      { categories: { some: { categoryId: options.categoryId } } },
+    ];
+  }
+
+  // Author Filter
+  if (options.authorId) {
+    where.authorId = options.authorId;
+  }
+
+  // Search Filter (Title or Slug)
+  if (options.search && options.search.trim()) {
+    const q = options.search.trim();
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      {
+        OR: [
+          { title: { contains: q, mode: "insensitive" } },
+          { slug: { contains: q, mode: "insensitive" } },
+        ],
+      },
+    ];
+  }
+
+  // Sorting
+  let orderBy: Prisma.ArticleOrderByWithRelationInput = { updatedAt: "desc" };
+  if (options.sort === "published_newest") {
+    orderBy = { publishedAt: "desc" };
+  } else if (options.sort === "published_oldest") {
+    orderBy = { publishedAt: "asc" };
+  } else if (options.sort === "title_asc") {
+    orderBy = { title: "asc" };
+  }
+
+  // Execute Count & Query concurrently
+  const [total, articles] = await Promise.all([
+    prisma.article.count({ where }),
+    prisma.article.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        excerpt: true,
+        status: true,
+        publishedAt: true,
+        scheduledAt: true,
+        createdAt: true,
+        updatedAt: true,
+        primaryCategory: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        author: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        featuredImage: {
+          select: {
+            id: true,
+            url: true,
+            fileName: true,
+            altText: true,
+          },
+        },
+        _count: {
+          select: {
+            categories: true,
+            tags: true,
+            inlineMedia: true,
+          },
+        },
+      },
+      orderBy,
+      take: pageSize,
+      skip,
+    }),
+  ]);
+
+  return {
+    articles: articles as AdminArticleSummaryItem[],
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize) || 1,
+  };
+}
+
+/**
+ * Safe Deletion of an Article (Section 48, 88).
+ * Removes article and relational junction rows, but NEVER deletes associated Media records or storage files.
+ */
+export async function deleteArticleSafe(id: string): Promise<{ success: boolean; message: string }> {
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Clean up junction rows
+      await tx.articleCategory.deleteMany({ where: { articleId: id } });
+      await tx.articleTag.deleteMany({ where: { articleId: id } });
+      await tx.articleMedia.deleteMany({ where: { articleId: id } });
+      await tx.articleSEO.deleteMany({ where: { articleId: id } });
+
+      // Delete main article record
+      await tx.article.delete({ where: { id } });
+    });
+
+    return {
+      success: true,
+      message: "Article deleted successfully. Associated media assets remain preserved in library.",
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err.message || "Failed to delete article record.",
+    };
+  }
 }
