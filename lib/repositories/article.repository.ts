@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { ArticleStatus, Prisma } from "@prisma/client";
-import { generateSlug, checkSlugAvailability } from "@/lib/articles/slug";
+import { generateSlug, checkSlugAvailability, sanitizePublicSlug } from "@/lib/articles/slug";
 
 /**
  * Standard relational include for article queries
@@ -32,7 +32,265 @@ export const articleDefaultInclude = {
 };
 
 // -----------------------------------------------------------------------------
-// PUBLIC FRONTEND QUERIES (Preserved from earlier phases)
+// PUBLIC FRONTEND PROJECTIONS & QUERIES (Phase 6 Architecture)
+// -----------------------------------------------------------------------------
+
+/**
+ * Optimized lightweight projection for public news cards (Section 29 & 44).
+ * Omits heavy rich content body to maximize performance.
+ */
+export const publicArticleCardSelect = {
+  id: true,
+  title: true,
+  slug: true,
+  excerpt: true,
+  publishedAt: true,
+  primaryCategory: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+  },
+  featuredImage: {
+    select: {
+      id: true,
+      url: true,
+      altText: true,
+      caption: true,
+      width: true,
+      height: true,
+    },
+  },
+  author: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      avatar: true,
+      role: true,
+    },
+  },
+} as const;
+
+/**
+ * Controlled projection for full public article reading experience (Section 43 & 48).
+ * Never exposes sensitive admin metadata, passwords, or storage credentials.
+ */
+export const publicArticleDetailSelect = {
+  id: true,
+  title: true,
+  slug: true,
+  excerpt: true,
+  content: true,
+  status: true,
+  publishedAt: true,
+  updatedAt: true,
+  primaryCategory: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+    },
+  },
+  categories: {
+    select: {
+      category: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      },
+    },
+  },
+  tags: {
+    select: {
+      tag: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      },
+    },
+  },
+  author: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      avatar: true,
+      role: true,
+      bio: true,
+    },
+  },
+  featuredImage: {
+    select: {
+      id: true,
+      url: true,
+      altText: true,
+      caption: true,
+      width: true,
+      height: true,
+    },
+  },
+  inlineMedia: {
+    select: {
+      caption: true,
+      order: true,
+      media: {
+        select: {
+          id: true,
+          url: true,
+          altText: true,
+          caption: true,
+          width: true,
+          height: true,
+        },
+      },
+    },
+    orderBy: {
+      order: "asc" as const,
+    },
+  },
+  seo: {
+    select: {
+      seoTitle: true,
+      metaDescription: true,
+      canonicalUrl: true,
+      socialTitle: true,
+      socialDescription: true,
+      socialImage: true,
+    },
+  },
+} as const;
+
+/**
+ * Retrieves a published article by slug with strict visibility protection (Sections 4-9, 43, 73, 74).
+ * Returns null if the article does not exist or if its status is DRAFT, SCHEDULED, or ARCHIVED.
+ * Leaks no private metadata, admin fields, or draft existence info.
+ */
+export async function getPublishedArticleBySlug(slug: string) {
+  const cleanSlug = sanitizePublicSlug(slug);
+  if (!cleanSlug) {
+    return null;
+  }
+
+  return prisma.article.findFirst({
+    where: {
+      slug: cleanSlug,
+      status: ArticleStatus.PUBLISHED,
+    },
+    select: publicArticleDetailSelect,
+  });
+}
+
+export interface GetRelatedArticlesOptions {
+  currentArticleId: string;
+  primaryCategoryId: string;
+  tagIds?: string[];
+  limit?: number;
+}
+
+/**
+ * Deterministic related articles selector (Sections 27, 28, 29, 76).
+ * Priority: Same primary category or shared tags.
+ * Strictly excludes current article and all non-published articles (no drafts, scheduled, or archived).
+ * Returns lightweight card projections (title, slug, image, category, published date) without full body content.
+ */
+export async function getRelatedArticles(options: GetRelatedArticlesOptions) {
+  const { currentArticleId, primaryCategoryId, tagIds = [], limit = 4 } = options;
+  const safeLimit = Math.min(6, Math.max(1, limit));
+
+  // Build OR conditions: same primary category OR shared tag
+  const orConditions: Prisma.ArticleWhereInput[] = [
+    { primaryCategoryId },
+  ];
+
+  if (tagIds.length > 0) {
+    orConditions.push({
+      tags: {
+        some: {
+          tagId: { in: tagIds },
+        },
+      },
+    });
+  }
+
+  return prisma.article.findMany({
+    where: {
+      status: ArticleStatus.PUBLISHED,
+      id: { not: currentArticleId },
+      OR: orConditions,
+    },
+    select: publicArticleCardSelect,
+    orderBy: {
+      publishedAt: "desc",
+    },
+    take: safeLimit,
+  });
+}
+
+export interface GetLatestPublishedArticlesOptions {
+  limit?: number;
+  excludeId?: string;
+}
+
+/**
+ * Retrieves recent published articles for the latest news feed (Sections 30, 77).
+ * Strictly filters by PUBLISHED status, ordered by publication date descending.
+ */
+export async function getLatestPublishedArticles(options: GetLatestPublishedArticlesOptions = {}) {
+  const { limit = 6, excludeId } = options;
+  const safeLimit = Math.min(20, Math.max(1, limit));
+
+  const where: Prisma.ArticleWhereInput = {
+    status: ArticleStatus.PUBLISHED,
+  };
+
+  if (excludeId) {
+    where.id = { not: excludeId };
+  }
+
+  return prisma.article.findMany({
+    where,
+    select: publicArticleCardSelect,
+    orderBy: {
+      publishedAt: "desc",
+    },
+    take: safeLimit,
+  });
+}
+
+/**
+ * Efficient public category articles query (Section 53-55).
+ */
+export async function getPublishedArticlesByCategory(
+  categorySlug: string,
+  limit = 20,
+  skip = 0
+) {
+  return prisma.article.findMany({
+    where: {
+      status: ArticleStatus.PUBLISHED,
+      OR: [
+        { primaryCategory: { slug: categorySlug } },
+        { categories: { some: { category: { slug: categorySlug } } } },
+      ],
+    },
+    select: publicArticleCardSelect,
+    orderBy: {
+      publishedAt: "desc",
+    },
+    take: limit,
+    skip,
+  });
+}
+
+// -----------------------------------------------------------------------------
+// LEGACY COMPATIBILITY QUERIES
 // -----------------------------------------------------------------------------
 
 export async function getPublishedArticles(limit = 20, skip = 0) {

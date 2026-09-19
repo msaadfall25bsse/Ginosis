@@ -106,3 +106,39 @@ export async function checkSlugAvailability(
     };
   }
 }
+
+/**
+ * Validates and safely decodes a public article slug from URL parameters (Section 74).
+ * Returns decoded, normalized slug if valid, or null if malformed, oversized, or unsafe.
+ */
+export function sanitizePublicSlug(rawSlug: unknown): string | null {
+  if (typeof rawSlug !== "string" || !rawSlug.trim()) {
+    return null;
+  }
+
+  let decoded = "";
+  try {
+    decoded = decodeURIComponent(rawSlug).trim();
+  } catch {
+    return null;
+  }
+
+  // Reject empty or oversized slugs (> 200 chars)
+  if (decoded.length === 0 || decoded.length > 200) {
+    return null;
+  }
+
+  // Reject unsafe injection characters
+  if (/[<>{}\\^~\[\]`|"\0\r\n]/.test(decoded)) {
+    return null;
+  }
+
+  return decoded.toLowerCase();
+}
+
+/**
+ * Checks if a public slug is valid
+ */
+export function isValidPublicSlug(rawSlug: unknown): boolean {
+  return sanitizePublicSlug(rawSlug) !== null;
+}
