@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CategorySlug } from "@/types/news";
 
 interface CategoryBadgeProps {
-  category: CategorySlug;
+  category: CategorySlug | string;
   label?: string;
   href?: string;
   className?: string;
