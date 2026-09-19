@@ -5,7 +5,7 @@ import { MediaGrid } from "./MediaGrid";
 import { MediaCardItem } from "./MediaCard";
 import { MediaUploader } from "./MediaUploader";
 import { MediaDetails } from "./MediaDetails";
-import { getMediaListAction } from "@/app/admin/media/actions";
+import { getMediaListAction } from "@/app/(admin)/admin/media/actions";
 
 interface MediaLibraryProps {
   initialData: {

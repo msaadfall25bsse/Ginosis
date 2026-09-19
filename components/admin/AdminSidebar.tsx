@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { logoutAction } from "@/app/admin/actions";
+import { logoutAction } from "@/app/(admin)/admin/actions";
 
 interface AdminSidebarProps {
   isOpen: boolean;

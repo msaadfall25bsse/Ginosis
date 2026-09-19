@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useTransition } from "react";
 import Image from "next/image";
 import { MediaCardItem } from "./MediaCard";
-import { getMediaListAction } from "@/app/admin/media/actions";
+import { getMediaListAction } from "@/app/(admin)/admin/media/actions";
 import { MediaUploader } from "./MediaUploader";
 
 interface MediaPickerProps {

@@ -7,7 +7,7 @@ import {
   updateMediaMetadataAction,
   deleteMediaAction,
   replaceMediaAction,
-} from "@/app/admin/media/actions";
+} from "@/app/(admin)/admin/media/actions";
 
 interface MediaDetailsProps {
   media: MediaCardItem | null;

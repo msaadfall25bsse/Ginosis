@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { logoutAction } from "@/app/admin/actions";
+import { logoutAction } from "@/app/(admin)/admin/actions";
 
 interface AdminHeaderProps {
   onToggleMobileMenu: () => void;
