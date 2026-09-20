@@ -34,7 +34,7 @@ export function CompactNewsCard({
           </span>
         </div>
         <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-red-700 dark:group-hover:text-red-400 leading-snug line-clamp-2 transition-colors">
-          <Link href={`/${article.primaryCategory}`}>
+          <Link href={article.slug ? `/news/${article.slug}` : `/${article.primaryCategory}`}>
             {article.title}
           </Link>
         </h4>

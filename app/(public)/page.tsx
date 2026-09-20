@@ -4,14 +4,52 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { FeaturedNewsCard } from "@/components/news/FeaturedNewsCard";
 import { NewsCard } from "@/components/news/NewsCard";
 import { CompactNewsCard } from "@/components/news/CompactNewsCard";
+import { getLatestPublishedArticles } from "@/lib/repositories/article.repository";
 import { PLACEHOLDER_ARTICLES } from "@/lib/placeholder-data";
+import { NewsArticlePlaceholder } from "@/types/news";
 
-export default function HomePage() {
-  const leadArticle = PLACEHOLDER_ARTICLES[0];
-  const secondaryArticles = PLACEHOLDER_ARTICLES.slice(1, 3);
-  const trendingArticles = PLACEHOLDER_ARTICLES.slice(1, 5);
-  const categoryHighlights = PLACEHOLDER_ARTICLES.slice(3, 7);
-  const moreNews = PLACEHOLDER_ARTICLES.slice(2, 6);
+export default async function HomePage() {
+  let dbArticles: any[] = [];
+  let isDbConnected = false;
+
+  try {
+    dbArticles = await getLatestPublishedArticles({ limit: 12 });
+    isDbConnected = true;
+  } catch {
+    isDbConnected = false;
+  }
+
+  let articles: NewsArticlePlaceholder[] = [];
+
+  if (isDbConnected && dbArticles.length > 0) {
+    articles = dbArticles.map((art) => ({
+      id: art.id,
+      title: art.title,
+      slug: art.slug,
+      excerpt: art.excerpt || "",
+      primaryCategory: (art.primaryCategory?.slug as any) || "world",
+      tags: [],
+      author: {
+        name: art.author?.name || "Staff Reporter",
+        role: art.author?.role || "Staff Correspondent",
+        avatar: art.author?.avatar || undefined,
+      },
+      publishedAt: art.publishedAt
+        ? new Date(art.publishedAt).toISOString()
+        : new Date().toISOString(),
+      readTime: "4 min read",
+      imageUrl: art.featuredImage?.url || "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200",
+      imageCaption: art.featuredImage?.caption || undefined,
+      isFeatured: true,
+    }));
+  }
+
+  const leadArticle = articles[0] || PLACEHOLDER_ARTICLES[0];
+  const secondaryArticles = articles.length >= 3 ? articles.slice(1, 3) : PLACEHOLDER_ARTICLES.slice(1, 3);
+  const trendingArticles = articles.length >= 5 ? articles.slice(1, 5) : PLACEHOLDER_ARTICLES.slice(1, 5);
+  const categoryHighlights = articles.length >= 8 ? articles.slice(3, 7) : PLACEHOLDER_ARTICLES.slice(3, 7);
+  const moreNews = articles.length >= 12 ? articles.slice(7, 11) : PLACEHOLDER_ARTICLES.slice(2, 6);
+  const briefingArticles = articles.length >= 4 ? articles.slice(0, 4) : PLACEHOLDER_ARTICLES.slice(0, 4);
 
   return (
     <div className="py-6 sm:py-8 space-y-12">
@@ -108,7 +146,7 @@ export default function HomePage() {
                 Essential context, global policy analysis, and verified reporting updated throughout the day.
               </p>
               <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                {PLACEHOLDER_ARTICLES.slice(0, 4).map((art, idx) => (
+                {briefingArticles.map((art, idx) => (
                   <CompactNewsCard key={art.id} article={art} index={idx} />
                 ))}
               </div>
