@@ -18,13 +18,15 @@ export function NewsCard({
     return (
       <article className="group flex flex-col sm:flex-row gap-4 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700">
         <div className="relative aspect-[16/10] sm:w-48 sm:h-32 shrink-0 overflow-hidden bg-zinc-100 dark:bg-zinc-800">
-          <Image
-            src={article.imageUrl}
-            alt={article.title}
-            fill
-            sizes="(max-width: 640px) 100vw, 192px"
-            className="object-cover transition-transform duration-300 ease-out group-hover:scale-105"
-          />
+          <Link href={article.slug ? `/news/${article.slug}` : `/${article.primaryCategory}`} className="block w-full h-full">
+            <Image
+              src={article.imageUrl}
+              alt={article.title}
+              fill
+              sizes="(max-width: 640px) 100vw, 192px"
+              className="object-cover transition-transform duration-300 ease-out group-hover:scale-105"
+            />
+          </Link>
         </div>
         <div className="flex flex-col justify-between flex-1 py-1">
           <div>
@@ -36,7 +38,7 @@ export function NewsCard({
               />
             </div>
             <h3 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-snug font-editorial group-hover:text-red-700 dark:group-hover:text-red-400 transition-colors line-clamp-2">
-              <Link href={`/${article.primaryCategory}`}>
+              <Link href={article.slug ? `/news/${article.slug}` : `/${article.primaryCategory}`}>
                 {article.title}
               </Link>
             </h3>
@@ -58,13 +60,15 @@ export function NewsCard({
   return (
     <article className="group flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700">
       <div className="relative aspect-[16/10] w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
-        <Image
-          src={article.imageUrl}
-          alt={article.title}
-          fill
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          className="object-cover transition-transform duration-300 ease-out group-hover:scale-105"
-        />
+        <Link href={article.slug ? `/news/${article.slug}` : `/${article.primaryCategory}`} className="block w-full h-full">
+          <Image
+            src={article.imageUrl}
+            alt={article.title}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="object-cover transition-transform duration-300 ease-out group-hover:scale-105"
+          />
+        </Link>
       </div>
       <div className="flex flex-col flex-1 p-4 justify-between">
         <div>
@@ -76,7 +80,7 @@ export function NewsCard({
             />
           </div>
           <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-snug font-editorial group-hover:text-red-700 dark:group-hover:text-red-400 transition-colors line-clamp-3 mb-2">
-            <Link href={`/${article.primaryCategory}`}>
+            <Link href={article.slug ? `/news/${article.slug}` : `/${article.primaryCategory}`}>
               {article.title}
             </Link>
           </h3>

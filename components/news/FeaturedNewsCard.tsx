@@ -17,16 +17,18 @@ export function FeaturedNewsCard({
   return (
     <article className="group relative grid grid-cols-1 lg:grid-cols-12 gap-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 sm:p-6 shadow-sm">
       <div className="relative aspect-[16/10] w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800 lg:col-span-7">
-        <Image
-          src={article.imageUrl}
-          alt={article.title}
-          fill
-          priority={priority}
-          sizes="(max-width: 1024px) 100vw, 60vw"
-          className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
-        />
+        <Link href={article.slug ? `/news/${article.slug}` : `/${article.primaryCategory}`} className="block w-full h-full">
+          <Image
+            src={article.imageUrl}
+            alt={article.title}
+            fill
+            priority={priority}
+            sizes="(max-width: 1024px) 100vw, 60vw"
+            className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
+          />
+        </Link>
         {article.imageCaption && (
-          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 text-[11px] text-zinc-300 hidden sm:block">
+          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 text-[11px] text-zinc-300 hidden sm:block pointer-events-none">
             {article.imageCaption}
           </div>
         )}
@@ -47,7 +49,7 @@ export function FeaturedNewsCard({
           </div>
 
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.2] font-editorial mb-3 group-hover:text-red-700 dark:group-hover:text-red-400 transition-colors">
-            <Link href={`/${article.primaryCategory}`}>
+            <Link href={article.slug ? `/news/${article.slug}` : `/${article.primaryCategory}`}>
               {article.title}
             </Link>
           </h2>
