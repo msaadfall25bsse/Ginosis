@@ -2,6 +2,11 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { ArticleStatus, Prisma } from "@prisma/client";
 import { generateSlug, checkSlugAvailability, sanitizePublicSlug } from "@/lib/articles/slug";
+import {
+  validateSearchQuery,
+  validatePagination,
+  validateCategoryFilter,
+} from "@/lib/search/validation";
 
 /**
  * Standard relational include for article queries
@@ -287,6 +292,184 @@ export async function getPublishedArticlesByCategory(
     take: limit,
     skip,
   });
+}
+
+export interface SearchPublishedArticlesOptions {
+  page?: number;
+  pageSize?: number;
+  categorySlug?: string;
+}
+
+export interface SearchPublishedArticlesResult {
+  articles: Array<{
+    id: string;
+    title: string;
+    slug: string;
+    excerpt: string;
+    publishedAt: Date | null;
+    primaryCategory: {
+      id: string;
+      name: string;
+      slug: string;
+    };
+    featuredImage: {
+      id: string;
+      url: string;
+      altText: string | null;
+      caption: string | null;
+      width: number | null;
+      height: number | null;
+    } | null;
+    author: {
+      id: string;
+      name: string;
+      slug: string;
+      avatar: string | null;
+      role: string | null;
+    };
+  }>;
+  totalCount: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+  query: string;
+}
+
+/**
+ * Server-side public article search query (Phase 7 Sections 1-22, 72-76, 87-88, 94-96, 99-101, 146).
+ * - Enforces status: PUBLISHED only (strictly bars drafts, scheduled, and archived stories).
+ * - Validates input query (strips control characters, max 256 chars, trims whitespace).
+ * - Never executes unconstrained queries on empty string (returns empty result immediately).
+ * - Searches across title, excerpt, slug, and tags (does NOT search full rich body content in initial Phase 7).
+ * - Implements deterministic relevance ranking:
+ *     Exact Title Match > Title Starts With > Title Contains > Slug Match > Excerpt Match
+ *     Ties broken deterministically by publishedAt DESC.
+ * - Enforces pagination bounds (pageSize 1-20, page >= 1).
+ * - Uses publicArticleCardSelect projection to prevent credential leakage and content bloat.
+ */
+export async function searchPublishedArticles(
+  rawQuery: string,
+  options: SearchPublishedArticlesOptions = {}
+): Promise<SearchPublishedArticlesResult> {
+  const { isValid, query: cleanQuery } = validateSearchQuery(rawQuery);
+  const { page, pageSize } = validatePagination(options.page, options.pageSize);
+  const validCategory = validateCategoryFilter(options.categorySlug);
+
+  // If query is empty or invalid, never hit the database (Section 9 & 126)
+  if (!isValid || !cleanQuery) {
+    return {
+      articles: [],
+      totalCount: 0,
+      totalPages: 0,
+      page,
+      pageSize,
+      query: "",
+    };
+  }
+
+  try {
+    const where: Prisma.ArticleWhereInput = {
+      status: ArticleStatus.PUBLISHED,
+      OR: [
+        { title: { contains: cleanQuery, mode: "insensitive" } },
+        { slug: { contains: cleanQuery, mode: "insensitive" } },
+        { excerpt: { contains: cleanQuery, mode: "insensitive" } },
+        {
+          tags: {
+            some: {
+              tag: {
+                name: { contains: cleanQuery, mode: "insensitive" },
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    if (validCategory) {
+      where.AND = [
+        {
+          OR: [
+            { primaryCategory: { slug: validCategory } },
+            { categories: { some: { category: { slug: validCategory } } } },
+          ],
+        },
+      ];
+    }
+
+    // Retrieve candidate matches with lightweight card projection (Section 14 & 48)
+    const candidates = await prisma.article.findMany({
+      where,
+      select: publicArticleCardSelect,
+      take: 100,
+    });
+
+    const lowerQuery = cleanQuery.toLowerCase();
+
+    // Calculate deterministic relevance score (Section 13, 94-96)
+    const scored = candidates.map((article) => {
+      let score = 0;
+      const lowerTitle = article.title.toLowerCase();
+      const lowerExcerpt = (article.excerpt || "").toLowerCase();
+      const lowerSlug = article.slug.toLowerCase();
+
+      if (lowerTitle === lowerQuery) {
+        score += 100; // Exact title match
+      } else if (lowerTitle.startsWith(lowerQuery)) {
+        score += 50; // Title starts with query
+      } else if (lowerTitle.includes(lowerQuery)) {
+        score += 30; // Title contains query
+      }
+
+      if (lowerSlug.includes(lowerQuery)) {
+        score += 25; // Slug match
+      }
+
+      if (lowerExcerpt.includes(lowerQuery)) {
+        score += 10; // Excerpt match
+      }
+
+      return { article, score };
+    });
+
+    // Sort by score descending; if score equal, sort by publishedAt DESC (Section 95-96)
+    scored.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      const dateA = a.article.publishedAt ? new Date(a.article.publishedAt).getTime() : 0;
+      const dateB = b.article.publishedAt ? new Date(b.article.publishedAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    const totalCount = scored.length;
+    const totalPages = Math.ceil(totalCount / pageSize);
+    const startIndex = (page - 1) * pageSize;
+    const paginatedArticles = scored
+      .slice(startIndex, startIndex + pageSize)
+      .map((item) => item.article);
+
+    return {
+      articles: paginatedArticles,
+      totalCount,
+      totalPages,
+      page,
+      pageSize,
+      query: cleanQuery,
+    };
+  } catch (error) {
+    if (process.env.NODE_ENV !== "test") {
+      console.warn("searchPublishedArticles fallback triggered:", (error as any)?.message || error);
+    }
+    return {
+      articles: [],
+      totalCount: 0,
+      totalPages: 0,
+      page,
+      pageSize,
+      query: cleanQuery,
+    };
+  }
 }
 
 // -----------------------------------------------------------------------------
