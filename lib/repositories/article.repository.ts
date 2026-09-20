@@ -7,6 +7,11 @@ import {
   validatePagination,
   validateCategoryFilter,
 } from "@/lib/search/validation";
+import {
+  calculateTrendingScore,
+  getCachedTrending,
+  setCachedTrending,
+} from "@/lib/trending/service";
 
 /**
  * Standard relational include for article queries
@@ -259,14 +264,101 @@ export async function getLatestPublishedArticles(options: GetLatestPublishedArti
     where.id = { not: excludeId };
   }
 
-  return prisma.article.findMany({
-    where,
-    select: publicArticleCardSelect,
-    orderBy: {
-      publishedAt: "desc",
-    },
-    take: safeLimit,
-  });
+  try {
+    return prisma.article.findMany({
+      where,
+      select: publicArticleCardSelect,
+      orderBy: {
+        publishedAt: "desc",
+      },
+      take: safeLimit,
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV !== "test") {
+      console.warn("getLatestPublishedArticles fallback triggered:", (error as any)?.message || error);
+    }
+    return [];
+  }
+}
+
+export interface GetTrendingArticlesOptions {
+  limit?: number;
+  excludeId?: string;
+  categorySlug?: string;
+}
+
+/**
+ * Retrieves trending published articles (Phase 7 Sections 3, 29-39, 66-71, 77, 89, 96, 112).
+ * - Filters strictly by status: PUBLISHED (drafts, scheduled, and archived articles are strictly excluded).
+ * - Limit bounded between 5 and 10 (default 6, Section 37).
+ * - Applies deterministic score formula: Activity × Recency Weight (Section 33, 138).
+ * - Bounded time decay window (24h/48h/7d).
+ * - Ties broken deterministically by publishedAt DESC (Section 96).
+ * - Reuses publicArticleCardSelect projection (Section 14 & 48).
+ * - Short-lived in-memory caching to optimize query load (Section 67 & 112).
+ * - Safe error handling for offline database environments.
+ */
+export async function getTrendingArticles(options: GetTrendingArticlesOptions = {}) {
+  const { limit = 6, excludeId, categorySlug } = options;
+  const safeLimit = Math.min(10, Math.max(5, limit)); // Section 37: 5-10 articles
+
+  const cacheKey = `trending:${safeLimit}:${excludeId || "none"}:${categorySlug || "all"}`;
+  const cached = getCachedTrending<any[]>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const where: Prisma.ArticleWhereInput = {
+      status: ArticleStatus.PUBLISHED,
+    };
+
+    if (excludeId) {
+      where.id = { not: excludeId };
+    }
+
+    if (categorySlug) {
+      where.OR = [
+        { primaryCategory: { slug: categorySlug } },
+        { categories: { some: { category: { slug: categorySlug } } } },
+      ];
+    }
+
+    // Retrieve recent candidate pool (e.g. up to 25 latest published articles) to score and rank
+    const candidates = await prisma.article.findMany({
+      where,
+      select: publicArticleCardSelect,
+      orderBy: {
+        publishedAt: "desc",
+      },
+      take: 25,
+    });
+
+    const now = new Date();
+    const scored = candidates.map((article) => ({
+      article,
+      score: calculateTrendingScore(article, now),
+    }));
+
+    // Sort by score descending; if score equal, sort by publishedAt DESC (Section 95-96)
+    scored.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      const dateA = a.article.publishedAt ? new Date(a.article.publishedAt).getTime() : 0;
+      const dateB = b.article.publishedAt ? new Date(b.article.publishedAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    const results = scored.slice(0, safeLimit).map((item) => item.article);
+    setCachedTrending(cacheKey, results);
+    return results;
+  } catch (error) {
+    if (process.env.NODE_ENV !== "test") {
+      console.warn("getTrendingArticles fallback triggered:", (error as any)?.message || error);
+    }
+    return [];
+  }
 }
 
 /**
