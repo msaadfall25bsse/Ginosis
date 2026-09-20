@@ -8,7 +8,11 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { FeaturedNewsCard } from "@/components/news/FeaturedNewsCard";
 import { NewsCard } from "@/components/news/NewsCard";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { getPublishedArticlesByCategory } from "@/lib/repositories/article.repository";
+import {
+  getPublishedArticlesByCategory,
+  getTrendingArticles,
+} from "@/lib/repositories/article.repository";
+import { TrendingNews } from "@/components/discovery/TrendingNews";
 
 interface CategoryViewProps {
   categorySlug: CategorySlug;
@@ -34,12 +38,16 @@ export async function CategoryView({ categorySlug }: CategoryViewProps) {
     );
   }
 
-  // 1. Fetch real published articles from database (Sections 53-55)
+  // 1. Fetch real published articles & trending from database (Sections 45, 53-55)
   let dbArticles: any[] = [];
+  let dbTrending: any[] = [];
   let isDbConnected = false;
 
   try {
-    dbArticles = await getPublishedArticlesByCategory(categorySlug, 20);
+    [dbArticles, dbTrending] = await Promise.all([
+      getPublishedArticlesByCategory(categorySlug, 20),
+      getTrendingArticles({ limit: 3, categorySlug }),
+    ]);
     isDbConnected = true;
   } catch {
     // Database connection offline fallback
@@ -149,6 +157,17 @@ export async function CategoryView({ categorySlug }: CategoryViewProps) {
                     <NewsCard key={article.id} article={article} />
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Category Trending / Discovery Block (Section 45) */}
+            {dbTrending.length > 0 && (
+              <div className="pt-8 border-t border-zinc-200 dark:border-zinc-800">
+                <TrendingNews
+                  articles={dbTrending}
+                  title={`Trending in ${categoryInfo.name}`}
+                  subtitle={`Most active coverage in ${categoryInfo.name} journalism.`}
+                />
               </div>
             )}
           </div>

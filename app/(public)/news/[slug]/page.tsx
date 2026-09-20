@@ -7,6 +7,7 @@ import {
   getPublishedArticleBySlug,
   getRelatedArticles,
   getLatestPublishedArticles,
+  getTrendingArticles,
 } from "@/lib/repositories/article.repository";
 import { PLACEHOLDER_ARTICLES } from "@/lib/placeholder-data";
 import { isValidPublicSlug } from "@/lib/articles/slug";
@@ -18,6 +19,7 @@ import { ArticleContentRenderer } from "@/components/news/ArticleContentRenderer
 import { ArticleTags } from "@/components/news/ArticleTags";
 import { RelatedArticlesSection } from "@/components/news/RelatedArticlesSection";
 import { LatestNewsFeed } from "@/components/news/LatestNewsFeed";
+import { TrendingNews } from "@/components/discovery/TrendingNews";
 
 interface NewsArticlePageProps {
   params: Promise<{
@@ -156,13 +158,14 @@ export default async function NewsArticlePage({ params }: NewsArticlePageProps) 
         inlineMedia: [],
       };
 
-  // 5. Fetch related & latest stories server-side (Sections 27-30, 76-77)
+  // 5. Fetch related, latest & trending stories server-side (Sections 27-30, 46, 76-77, 124)
   let relatedArticles: any[] = [];
   let latestArticles: any[] = [];
+  let trendingArticles: any[] = [];
 
   if (dbArticle) {
     try {
-      [relatedArticles, latestArticles] = await Promise.all([
+      [relatedArticles, latestArticles, trendingArticles] = await Promise.all([
         getRelatedArticles({
           currentArticleId: dbArticle.id,
           primaryCategoryId: dbArticle.primaryCategory.id,
@@ -170,6 +173,10 @@ export default async function NewsArticlePage({ params }: NewsArticlePageProps) 
           limit: 4,
         }),
         getLatestPublishedArticles({
+          limit: 4,
+          excludeId: dbArticle.id,
+        }),
+        getTrendingArticles({
           limit: 4,
           excludeId: dbArticle.id,
         }),
@@ -194,6 +201,16 @@ export default async function NewsArticlePage({ params }: NewsArticlePageProps) 
       }));
     latestArticles = otherStories.slice(0, 4).map((p) => ({
       id: "latest-" + p.slug,
+      title: p.title,
+      slug: p.slug,
+      excerpt: p.excerpt,
+      publishedAt: p.publishedAt,
+      primaryCategory: { id: p.primaryCategory, name: p.primaryCategory.toUpperCase(), slug: p.primaryCategory },
+      featuredImage: { id: "img-" + p.slug, url: p.imageUrl, altText: p.title },
+      author: { id: "auth-" + p.slug, name: p.author.name, slug: "staff" },
+    }));
+    trendingArticles = otherStories.slice(1, 5).map((p) => ({
+      id: "trend-" + p.slug,
       title: p.title,
       slug: p.slug,
       excerpt: p.excerpt,
@@ -247,7 +264,7 @@ export default async function NewsArticlePage({ params }: NewsArticlePageProps) 
             />
           </main>
 
-          {/* 6. Article Tags (Topics rendered as non-link badges) */}
+          {/* 6. Article Tags (Topics rendered as non-link badges, Section 50) */}
           {article.tags.length > 0 && <ArticleTags tags={article.tags} />}
 
           {/* 7. Bottom Share Bar */}
@@ -274,6 +291,17 @@ export default async function NewsArticlePage({ params }: NewsArticlePageProps) 
 
           {/* 10. Latest News Wire Feed */}
           <LatestNewsFeed articles={latestArticles} />
+
+          {/* 11. Trending Stories Discovery (Sections 46, 124) */}
+          {trendingArticles.length > 0 && (
+            <div className="pt-6">
+              <TrendingNews
+                articles={trendingArticles}
+                title="Trending Now"
+                subtitle="Stories currently receiving international reader attention."
+              />
+            </div>
+          )}
         </div>
       </Container>
     </article>

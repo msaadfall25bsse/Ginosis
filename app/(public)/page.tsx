@@ -4,16 +4,23 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { FeaturedNewsCard } from "@/components/news/FeaturedNewsCard";
 import { NewsCard } from "@/components/news/NewsCard";
 import { CompactNewsCard } from "@/components/news/CompactNewsCard";
-import { getLatestPublishedArticles } from "@/lib/repositories/article.repository";
+import {
+  getLatestPublishedArticles,
+  getTrendingArticles,
+} from "@/lib/repositories/article.repository";
 import { PLACEHOLDER_ARTICLES } from "@/lib/placeholder-data";
 import { NewsArticlePlaceholder } from "@/types/news";
 
 export default async function HomePage() {
   let dbArticles: any[] = [];
+  let dbTrending: any[] = [];
   let isDbConnected = false;
 
   try {
-    dbArticles = await getLatestPublishedArticles({ limit: 12 });
+    [dbArticles, dbTrending] = await Promise.all([
+      getLatestPublishedArticles({ limit: 12 }),
+      getTrendingArticles({ limit: 4 }),
+    ]);
     isDbConnected = true;
   } catch {
     isDbConnected = false;
@@ -44,9 +51,32 @@ export default async function HomePage() {
     }));
   }
 
+  const trendingArticles: NewsArticlePlaceholder[] =
+    dbTrending.length > 0
+      ? dbTrending.map((art) => ({
+          id: art.id,
+          title: art.title,
+          slug: art.slug,
+          excerpt: art.excerpt || "",
+          primaryCategory: (art.primaryCategory?.slug as any) || "world",
+          tags: [],
+          author: {
+            name: art.author?.name || "Staff Reporter",
+            role: art.author?.role || "Staff Correspondent",
+            avatar: art.author?.avatar || undefined,
+          },
+          publishedAt: art.publishedAt
+            ? new Date(art.publishedAt).toISOString()
+            : new Date().toISOString(),
+          readTime: "4 min read",
+          imageUrl: art.featuredImage?.url || "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200",
+          imageCaption: art.featuredImage?.caption || undefined,
+          isFeatured: true,
+        }))
+      : (articles.length >= 5 ? articles.slice(1, 5) : PLACEHOLDER_ARTICLES.slice(1, 5));
+
   const leadArticle = articles[0] || PLACEHOLDER_ARTICLES[0];
   const secondaryArticles = articles.length >= 3 ? articles.slice(1, 3) : PLACEHOLDER_ARTICLES.slice(1, 3);
-  const trendingArticles = articles.length >= 5 ? articles.slice(1, 5) : PLACEHOLDER_ARTICLES.slice(1, 5);
   const categoryHighlights = articles.length >= 8 ? articles.slice(3, 7) : PLACEHOLDER_ARTICLES.slice(3, 7);
   const moreNews = articles.length >= 12 ? articles.slice(7, 11) : PLACEHOLDER_ARTICLES.slice(2, 6);
   const briefingArticles = articles.length >= 4 ? articles.slice(0, 4) : PLACEHOLDER_ARTICLES.slice(0, 4);
