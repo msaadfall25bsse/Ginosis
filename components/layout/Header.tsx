@@ -33,11 +33,11 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Visual Search Trigger Placeholder (as requested in Phase 1 specs) */}
-            <button
-              type="button"
+            {/* Public Search Entry Point (Phase 7 Section 5 & 26) */}
+            <Link
+              href="/search"
               className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors focus:outline-none focus:ring-1 focus:ring-zinc-400 p-1 rounded"
-              title="Search (Feature coming in Phase 7)"
+              title="Search articles"
               aria-label="Search articles"
             >
               <svg
@@ -46,6 +46,7 @@ export function Header() {
                 viewBox="0 0 24 24"
                 strokeWidth={2}
                 stroke="currentColor"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -56,7 +57,7 @@ export function Header() {
               <span className="hidden md:inline text-[11px] uppercase tracking-wider font-semibold">
                 Search
               </span>
-            </button>
+            </Link>
           </div>
         </Container>
       </div>
