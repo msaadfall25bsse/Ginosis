@@ -27,6 +27,7 @@ interface LatestNewsProps {
   linkText?: string;
   layout?: "grid" | "compact";
   className?: string;
+  excludeId?: string;
 }
 
 /**
@@ -41,13 +42,18 @@ export function LatestNews({
   linkText = "View full wire →",
   layout = "grid",
   className = "",
+  excludeId,
 }: LatestNewsProps) {
-  if (!articles || articles.length === 0) {
+  const candidateArticles = excludeId
+    ? articles.filter((a) => a.id !== excludeId)
+    : articles;
+
+  if (!candidateArticles || candidateArticles.length === 0) {
     return null;
   }
 
   // Cap display count to reasonable limit (Section 41 & 101)
-  const displayArticles = articles.slice(0, layout === "grid" ? 4 : 6);
+  const displayArticles = candidateArticles.slice(0, layout === "grid" ? 4 : 6);
 
   return (
     <section
